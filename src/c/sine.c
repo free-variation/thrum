@@ -77,7 +77,7 @@ int device_capabilities(const char *device_name) {
 	snd_pcm_hw_params_get_buffer_size_min(hw_params, &min_buffer);
 	snd_pcm_hw_params_get_buffer_size_max(hw_params, &max_buffer);
 
-	printf("BUffer size range: %lu to %lu frames\n", min_buffer, max_buffer);
+	printf("Buffer size range: %lu to %lu frames\n", min_buffer, max_buffer);
 	
 	snd_pcm_hw_params_free(hw_params);
 
@@ -87,7 +87,60 @@ int device_capabilities(const char *device_name) {
 	return 0;
 }
 
+void list_device_types() {
+	const char *device_types[] = {"pcm", "ctl", "rawmidi", "hwdep", "seq", "timer"};
+	int num_types = 6;
+
+	for (int i = 0; i < num_types; i++) {
+		void **hints;
+		int count = 0;
+
+		int err = snd_device_name_hint(-1, device_types[i], &hints);
+
+		if (err >= 0) {
+			printf("Defice type %s:\n", device_types[i]);
+
+			void **hint = hints;
+			while (*hint != NULL) {
+				char *name = snd_device_name_get_hint(*hint, "NAME");
+				if (name) {
+					printf("\tDevice: %s\n", name);
+
+					char *desc = snd_device_name_get_hint(*hint, "DESC");
+					if (desc) {
+						printf("\tDescription: %s\n", desc);
+						free(desc);
+					}
+
+					if (strcmp(device_types[i], "pcm") == 0) {
+						char *ioid = snd_device_name_get_hint(*hint, "IOID");
+						if (ioid) {
+							printf("\tI/O: %s\n", ioid);
+							free(ioid);
+						} else {
+							printf("	I/O: Playback and Capture\n");
+						}
+					}
+
+					free(name);
+				}
+
+				hint++;
+				count++;
+			}
+
+			printf("\tTotal: %d devices\n\n", count);
+
+			snd_device_name_free_hint(hints);
+		} else {
+			printf("Device type %s: Error %s\n\n", device_types[i], snd_strerror(err));
+		}
+	}
+}
+
 int main() {
+	list_device_types();
+
 	device_capabilities("hw:0,0");
 	return device_capabilities("default");
 }
