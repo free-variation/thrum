@@ -138,9 +138,62 @@ void list_device_types() {
 	}
 }
 
-int main() {
+int initialize_device(const char*device_name, snd_pcm_t **pcm_handle) {
+	int err;
+	snd_pcm_hw_params_t *hw_params;
+
+	if ((err = snd_pcm_open(pcm_handle, device_name, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
+		fprintf(stderr, "Cannot open audio device %s: %s\n", device_name, snd_strerror(err));
+		goto error;
+	}
+
+	printf("Initializing device %s, handle: %p\n", device_name, *pcm_handle);
+
+	if ((err = snd_pcm_hw_params_malloc(&hw_params)) < 0) {
+		fprintf(stderr, "Cannot allocate hardware parameter structure: %s\n", snd_strerror(err));
+		goto error;
+	}
+
+	if ((err = snd_pcm_hw_params_any(*pcm_handle, hw_params)) < 0) {
+	 	fprintf(stderr, "Cannot initialize hardware parameter structure: %s\n", snd_strerror(err));
+	 	goto error;
+	}
+
+	err = snd_pcm_hw_params_set_channels(*pcm_handle, hw_params, 1);
+	if (err < 0) {
+		fprintf(stderr, "Cannot set channel count to mono: %s\n", snd_strerror(err));
+		goto error;
+	}
+
+	// set all the parameters
+	err = snd_pcm_hw_params(*pcm_handle, hw_params);
+	if (err < 0) {
+		fprintf(stderr, "Cannot set parameters: %s\n", snd_strerror(err));
+		goto error;
+	}
+
+	snd_pcm_hw_params_free(hw_params);
+	return 0;
+
+error:
+	if (hw_params) snd_pcm_hw_params_free(hw_params);
+	if (*pcm_handle) snd_pcm_close(*pcm_handle);
+	return err;
+}
+
+int main(int argc, char *argv[]) {
+	snd_pcm_t *pcm_handle;
+	const char *use_device = "default";
+
 	list_device_types();
 
-	device_capabilities("hw:0,0");
-	return device_capabilities("default");
+	if (argc > 1) {
+		use_device = argv[1];
+	}
+
+	device_capabilities(use_device);
+	
+	initialize_device(use_device, &pcm_handle);
+	snd_pcm_close(pcm_handle);
+	printf("Closed device %s\n", use_device);
 }
