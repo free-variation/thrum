@@ -165,6 +165,56 @@ int initialize_device(const char*device_name, snd_pcm_t **pcm_handle) {
 		goto error;
 	}
 
+	err = snd_pcm_hw_params_set_access(*pcm_handle, hw_params, SND_PCM_ACCESS_RW_NONINTERLEAVED);
+	if (err < 0) {
+		fprintf(stderr, "Cannot set non-interleaved access: %s\n", snd_strerror(err));
+		goto error;
+	}
+
+	const unsigned int sampling_rate = 48000;
+	unsigned int rate = sampling_rate;
+	int dir = 0;
+
+	err = snd_pcm_hw_params_set_rate_near(*pcm_handle, hw_params, &rate, &dir);
+	if (err < 0) {
+		fprintf(stderr, "Cannot set sample rate access: %s\n", snd_strerror(err));
+		goto error;
+	}
+
+	if (rate != sampling_rate) {
+		printf("\tNote: Actual rate set to %u Hz (requested %u)\n", rate, sampling_rate);
+
+	}
+
+	err = snd_pcm_hw_params_set_format(*pcm_handle, hw_params, SND_PCM_FORMAT_FLOAT_LE);
+	if (err < 0) {
+		fprintf(stderr, "Cannot set floating-point format: %s\n", snd_strerror(err));
+		printf("\tTrying 32-bit integer ...\n");
+
+		err = snd_pcm_hw_params_set_format(*pcm_handle, hw_params, SND_PCM_FORMAT_S32_LE);
+		if (err < 0) {
+			fprintf(stderr, "Cannot set 32-bit integer format: %s\n", snd_strerror(err));
+			goto error;
+		}
+	}
+
+	snd_pcm_uframes_t period_size = 256;
+	
+	err = snd_pcm_hw_params_set_period_size_near(*pcm_handle, hw_params, &period_size, &dir);
+	if (err < 0) {
+		fprintf(stderr, "Cannot set period size: %s\n", snd_strerror(err));
+		goto error;
+	}
+
+	printf("Period size set to %lu frames\n", period_size);
+
+	unsigned int periods = 3;
+	err = snd_pcm_hw_params_set_periods_near(*pcm_handle, hw_params, &periods, &dir);
+	if (err < 0) {
+		fprintf(stderr, "Cannot set number of periods: %s\n", snd_strerror(err));
+		goto error;
+	}
+
 	// set all the parameters
 	err = snd_pcm_hw_params(*pcm_handle, hw_params);
 	if (err < 0) {
@@ -173,6 +223,14 @@ int initialize_device(const char*device_name, snd_pcm_t **pcm_handle) {
 	}
 
 	snd_pcm_hw_params_free(hw_params);
+	hw_params = NULL;
+
+	err = snd_pcm_prepare(*pcm_handle);
+	if (err < 0) {
+		fprintf(stderr, "Cannot prepare PCM device: %s\n", snd_strerror(err));
+		goto error;
+	}
+
 	return 0;
 
 error:
@@ -184,6 +242,7 @@ error:
 int main(int argc, char *argv[]) {
 	snd_pcm_t *pcm_handle;
 	const char *use_device = "default";
+	int err;
 
 	list_device_types();
 
@@ -193,7 +252,10 @@ int main(int argc, char *argv[]) {
 
 	device_capabilities(use_device);
 	
-	initialize_device(use_device, &pcm_handle);
-	snd_pcm_close(pcm_handle);
-	printf("Closed device %s\n", use_device);
+	err = initialize_device(use_device, &pcm_handle);
+
+	if (!err) {
+		snd_pcm_close(pcm_handle);
+		printf("Closed device %s\n", use_device);
+	}
 }
